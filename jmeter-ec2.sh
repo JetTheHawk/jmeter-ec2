@@ -293,7 +293,7 @@ function runsetup() {
 				 						 --region $REGION \
 										 --output json \
 										 --query 'InstanceStatuses[].InstanceStatus.Details[].Status' | grep -c passed`)
-				sleep 1
+				sleep 5
     done
     progressBar $countof_instanceids $count_passed true
     echo
@@ -309,7 +309,7 @@ function runsetup() {
       hosts=(`aws ec2 describe-instances --instance-ids ${attempted_instanceids[@]} \
 						--region $REGION \
 						--output text \
-						--query 'Reservations[].Instances[].PublicIpAddress'`)
+						--query 'Reservations[].Instances[].PrivateIpAddress'`)
 
       # echo "all hosts ready"
     else # Amazon probably failed to start a host [*** NOTE this is fairly common ***] so show a msg - TO DO. Could try to replace it with a new one?
@@ -325,7 +325,7 @@ function runsetup() {
       hosts=(`aws ec2 describe-instances --instance-ids ${healthy_instanceids[@]} \
 						--region $REGION \
 						--output text \
-						--query 'Reservations[].Instances[].PublicIpAddress'`)
+						--query 'Reservations[].Instances[].PrivateIpAddress'`)
 
       if [ "${#healthy_instanceids[@]}" -eq 0 ] ; then
         countof_instanceids=0
@@ -385,7 +385,7 @@ function runsetup() {
       # check for ssh connectivity on the new address
       while ssh -o StrictHostKeyChecking=no -q -i $PEM_PATH/$PEM_FILE \
           $USER@${hosts[x]} -p $REMOTE_PORT true && test; \
-          do echo -n .; sleep 1; done
+          do echo -n .; sleep 5; done
       # Note. If any IP is already in use on an instance that is still running then the ssh check above will return
       # a false positive. If this scenario is common you should put a sleep statement here.
       done
@@ -421,16 +421,16 @@ function runsetup() {
 
   # scp verify.sh
   if [ "$setup" = "TRUE" ] ; then
-  	echo "copying verify.sh to $instance_count server(s)..."
-
+    echo "copying verify.sh to $instance_count server(s)..."
+    echo "host in hosts" ${hosts[@]}
     for host in ${hosts[@]} ; do
-      (scp -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
-                    -i "$PEM_PATH/$PEM_FILE" \
+      echo "copying verify.sh loop"
+      (scp -q -o UserKnownHostsFile="USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
+                    -i "$PEM_FULL_PATH" \
                     -P $REMOTE_PORT \
                     $LOCAL_HOME/verify.sh \
                     $LOCAL_HOME/jmeter-ec2.properties \
-                    $USER@$host:$REMOTE_HOME \
-                    && echo "done" > $project_home/$DATETIME-$host-scpverify.out) &
+                    $USER@$host:$REMOTE_HOME 1> $project_home/$DATETIME-$host-scpverify.out 2>&1) &
     done
 
     # check to see if the scp call is complete (could just use the wait command here...)
@@ -443,7 +443,7 @@ function runsetup() {
         # Note. We send stderr to dev/null in the ls cmd below to prevent file not found errors filling the screen
         # and the sed command here trims whitespace
         res=$(ls -l $project_home/$DATETIME*scpverify.out 2>/dev/null | wc -l | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-        sleep 1
+        sleep 5
     done
     progressBar $instance_count $res true
     echo
@@ -465,7 +465,7 @@ function runsetup() {
       progressBar $instance_count $res
       res=$(grep -c "software installed" $project_home/$DATETIME*verify.out \
           | awk -F: '{ s+=$NF } END { print s }') # the awk command here sums up the output if multiple matches were found
-      sleep 1
+      sleep 5
     done
     progressBar $instance_count $res true
     echo
@@ -618,7 +618,7 @@ function runsetup() {
   # scp jmx dir
   echo -n "jmx files.."
   for y in "${!hosts[@]}" ; do
-      (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -r \
+      (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no -r \
                                     -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                     $project_home/working_$y \
                                     $USER@${hosts[$y]}:$REMOTE_HOME/execute.jmx) &
@@ -631,7 +631,7 @@ function runsetup() {
   	if [ -r $project_home/data ] ; then # don't try to upload this optional dir if it is not present
       echo -n "data dir.."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -r \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no -r \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $project_home/data \
                                         $USER@$host:$REMOTE_HOME/) &
@@ -644,7 +644,7 @@ function runsetup() {
     if [ -r $LOCAL_HOME/jmeter.properties ] ; then # don't try to upload this optional file if it is not present
       echo -n "jmeter.properties.."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $LOCAL_HOME/jmeter.properties \
                                         $USER@$host:$REMOTE_HOME/$JMETER_VERSION/bin/) &
@@ -657,7 +657,7 @@ function runsetup() {
     if [ -r $LOCAL_HOME/system.properties ] ; then # don't try to upload this optional file if it is not present
       echo -n "system.properties.."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $LOCAL_HOME/system.properties \
                                         $USER@$host:$REMOTE_HOME/$JMETER_VERSION/bin/) &
@@ -670,7 +670,7 @@ function runsetup() {
     if [ -r $LOCAL_HOME/keystore.jks ] ; then # don't try to upload this optional file if it is not present
       echo -n "keystore.jks.."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $LOCAL_HOME/keystore.jks \
                                         $USER@$host:$REMOTE_HOME) &
@@ -683,7 +683,7 @@ function runsetup() {
     if [ -r $LOCAL_HOME/jmeter ] ; then # don't try to upload this optional file if it is not present
       echo -n "jmeter execution file..."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $LOCAL_HOME/jmeter $LOCAL_HOME/jmeter \
                                         $USER@$host:$REMOTE_HOME/$JMETER_VERSION/bin/) &
@@ -696,7 +696,7 @@ function runsetup() {
     if [ -r $LOCAL_HOME/plugins ] ; then # don't try to upload this optional dir if it is not present
       echo -n "custom jar file(s)..."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $LOCAL_HOME/plugins/*.jar \
                                         $USER@$host:$REMOTE_HOME/$JMETER_VERSION/lib/ext/) &
@@ -709,7 +709,7 @@ function runsetup() {
 	    if [ -r $project_home/plugins ] ; then # don't try to upload this optional dir if it is not present
       echo -n "project specific jar file(s)..."
       for host in ${hosts[@]} ; do
-          (scp -q -C -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
+          (scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" -o StrictHostKeyChecking=no \
                                         -i "$PEM_PATH/$PEM_FILE" -P $REMOTE_PORT \
                                         $project_home/plugins/*.jar \
                                         $USER@$host:$REMOTE_HOME/$JMETER_VERSION/lib/ext/) &
@@ -890,7 +890,7 @@ function runcleanup() {
     # download the results
     for i in ${!hosts[@]} ; do
       echo -n "downloading results from ${hosts[$i]}..."
-      scp -q -C -o UserKnownHostsFile=/dev/null \
+      scp -q -C -o UserKnownHostsFile="$USER_KNOWN_HOSTS" \
                                    -o StrictHostKeyChecking=no \
                                    -i "$PEM_PATH/$PEM_FILE" \
                                    -P $REMOTE_PORT \

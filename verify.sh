@@ -12,9 +12,12 @@ function install_jmeter_plugins() {
 
 function install_java() {
     echo "Updating apt-get..."
-    sudo apt-get -qqy update
+    sudo add-apt-repository ppa:webupd8team/java
+    sudo apt-get update
     echo "Installing java..."
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-7-jre
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y oracle-java8-installer
+    echo Y
+    echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | sudo /usr/bin/debconf-set-selections
     echo "Java installed"
 }
 
